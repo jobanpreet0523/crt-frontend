@@ -1,20 +1,10 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import DojiScreener from '../crt-dashboard/src/DojiScreener';
+import '../crt-dashboard/src/index.css'; // Directs the build engine to bundle your Tailwind layers
 
-{
-  "name": "crt-frontend-root",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite crt-dashboard",
-    "build": "vite build crt-dashboard",
-    "preview": "vite preview crt-dashboard"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.0.0"
-  }
-}
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <DojiScreener />
+  </React.StrictMode>
+);
