@@ -1,252 +1,148 @@
 import React, { useState, useEffect } from 'react';
-import { fetchDojiScan, fetchStockQuote, fetchAIAnalysis } from './api';
+import { fetchDojiScan } from './api'; // Pulls from your live Render URL
 
 export default function DojiScreener() {
-  // --- Doji Screener States ---
   const [timeframe, setTimeframe] = useState('1D');
   const [screenerStocks, setScreenerStocks] = useState([]);
   const [screenerLoading, setScreenerLoading] = useState(false);
-  const [screenerError, setScreenerError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // --- Quote Search States ---
-  const [searchTicker, setSearchTicker] = useState('');
-  const [quoteData, setQuoteData] = useState(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-
-  // --- AI Research States ---
-  const [aiTicker, setAiTicker] = useState('');
-  const [aiData, setAiData] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-
-  // 1. Core Screener Effect Engine
+  // 🏁 AUTOMATIC INITIAL LOAD: Fetch data immediately when page loads
   useEffect(() => {
-    const getScreenerData = async () => {
-      setScreenerLoading(true);
-      setScreenerError(null);
-      const res = await fetchDojiScan(timeframe);
-      if (res.ok) {
-        setScreenerStocks(res.results);
-      } else {
-        setScreenerError(res.error || "Failed to load scan matrices.");
-      }
-      setScreenerLoading(false);
-    };
-    getScreenerData();
+    loadScreenerData(timeframe);
   }, [timeframe]);
 
-  // 2. Quote Lookup Handler
-  const handleQuoteSearch = async (e) => {
-    e.preventDefault();
-    if (!searchTicker) return;
-    setQuoteLoading(true);
-    const res = await fetchStockQuote(searchTicker);
-    if (res.ok && res.quotes.length > 0) {
-      setQuoteData(res.quotes[0]);
-    } else {
-      alert("Stock not found. Note: Use symbols like RELIANCE, TCS, or SBIN.");
-      setQuoteData(null);
+  const loadScreenerData = async (selectedTimeframe) => {
+    setScreenerLoading(true);
+    try {
+      const response = await fetchDojiScan(selectedTimeframe);
+      if (response.ok) {
+        setScreenerStocks(response.results || []);
+      } else {
+        console.error("API Error:", response.error);
+      }
+    } catch (err) {
+      console.error("Failed fetching stocks:", err);
+    } finally {
+      setScreenerLoading(false);
     }
-    setQuoteLoading(false);
   };
 
-  // 3. AI Analysis Request Handler
-  const handleAIAnalyze = async (e) => {
-    e.preventDefault();
-    if (!aiTicker) return;
-    setAiLoading(true);
-    const res = await fetchAIAnalysis(aiTicker);
-    if (res.ok && res.analysisData) {
-      setAiData(res.analysisData);
-    } else {
-      alert("Unable to process technicals for this ticker.");
-      setAiData(null);
-    }
-    setAiLoading(false);
-  };
+  // Filter stocks based on search input
+  const filteredStocks = screenerStocks.filter(stock => 
+    stock.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stock.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white font-sans selection:bg-blue-500/30">
-      <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-12">
-        
-        {/* Core App Header Branding */}
-        <div className="text-center border-b border-gray-800 pb-6">
-          <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Stock Research Platform
-          </h1>
-          <p className="text-gray-400 mt-2 text-sm font-mono">Live NSE Market Analytics Engine</p>
-        </div>
+    <div className="min-h-screen bg-gray-900 text-gray-100 p-6 font-sans">
+      {/* Header Panel */}
+      <div className="max-w-6xl mx-auto bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6 shadow-xl">
+        <h1 className="text-2xl font-bold text-white mb-2">Doji - 2 Candlestick Screener</h1>
+        <p className="text-sm text-gray-400">
+          Filters stocks forming precise equilibrium neutral doji patterns across selected timeframes.
+        </p>
+      </div>
 
-        {/* ================= SECTION 1: SEARCH STOCK ================= */}
-        <div className="bg-[#161b22] border border-gray-800 rounded-xl p-6 shadow-xl space-y-4">
-          <h2 className="text-xl font-bold tracking-wide text-center uppercase text-gray-300">Search Stock</h2>
-          <form onSubmit={handleQuoteSearch} className="flex justify-center gap-3 max-w-md mx-auto">
-            <input
-              type="text"
-              placeholder="Enter stock (e.g. RELIANCE, TCS)"
-              value={searchTicker}
-              onChange={(e) => setSearchTicker(e.target.value)}
-              className="w-full bg-[#0d1117] border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono"
-            />
-            <button
-              type="submit"
-              disabled={quoteLoading}
-              className="bg-blue-600 hover:bg-blue-500 transition-colors px-6 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
-            >
-              {quoteLoading ? "..." : "Search"}
-            </button>
-          </form>
-
-          {quoteData && (
-            <div className="max-w-md mx-auto p-4 bg-[#0d1117] border border-gray-800 rounded-lg flex justify-between items-center font-mono">
-              <div>
-                <span className="text-blue-400 font-bold text-lg">{quoteData.symbol}</span>
-                <span className="text-gray-500 text-xs block">Last Traded Price</span>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-bold">₹{quoteData.price.toLocaleString('en-IN')}</div>
-                <div className={`text-xs font-semibold ${quoteData.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {quoteData.change >= 0 ? `+${quoteData.change}%` : `${quoteData.change}%`}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ================= SECTION 2: DOJI SCREENER ================= */}
-        <div className="bg-[#161b22] border border-gray-800 rounded-xl p-6 shadow-xl space-y-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold tracking-wide uppercase text-gray-300">Doji Screener</h2>
-            <p className="text-xs text-gray-500 mt-1">Filters equities where open matches close inside a range threshold.</p>
-          </div>
-
-          {/* Timeframe Toggles */}
-          <div className="flex justify-center gap-2">
-            {['1D', '1W', '1M', '3M'].map((tf) => (
+      {/* Filter Logic Panel */}
+      <div className="max-w-6xl mx-auto bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6 shadow-xl">
+        <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filter Logic Engine</h2>
+          
+          {/* Timeframe Selectors */}
+          <div className="flex space-x-1 bg-gray-900 p-1 rounded-md border border-gray-700">
+            {['1D', '1W', '1M'].map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-5 py-2 text-xs font-bold rounded-md border tracking-wider transition-all ${
-                  timeframe === tf
-                    ? 'bg-white text-black border-white shadow-md transform scale-105'
-                    : 'bg-[#0d1117] text-gray-400 border-gray-700 hover:bg-gray-800 hover:text-white'
+                className={`px-4 py-1.5 text-xs font-medium rounded transition-colors ${
+                  timeframe === tf 
+                    ? 'bg-blue-600 text-white shadow' 
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
               >
-                {tf}
+                {tf === '1D' ? 'Daily' : tf === '1W' ? 'Weekly' : 'Monthly'}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Screener Output Matrix Panel */}
-          <div className="bg-[#0d1117] rounded-lg border border-gray-800 overflow-hidden">
-            {screenerLoading ? (
-              <div className="text-center py-16 text-blue-400 font-mono text-xs animate-pulse">
-                Running real-time processing formulas on Cloud Metrics...
-              </div>
-            ) : screenerError ? (
-              <div className="text-center py-8 text-red-400 font-mono text-xs">{screenerError}</div>
-            ) : screenerStocks.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-[#161b22] text-gray-400 uppercase tracking-wider border-b border-gray-800 font-mono">
-                      <th className="py-3 px-4 w-12 text-center">Sr.</th>
-                      <th className="py-3 px-4">Symbol</th>
-                      <th className="py-3 px-4">Sector</th>
-                      <th className="py-3 px-4 text-right">Price (INR)</th>
-                      <th className="py-3 px-4 text-right">Chg %</th>
-                      <th className="py-3 px-4 text-right">Volume</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800/60 font-mono">
-                    {screenerStocks.map((stock, idx) => (
-                      <tr key={stock.symbol} className="hover:bg-[#1f242c] transition-colors">
-                        <td className="py-3.5 px-4 text-center text-gray-600">{idx + 1}</td>
-                        <td className="py-3.5 px-4 text-blue-400 font-bold">{stock.symbol}</td>
-                        <td className="py-3.5 px-4 text-gray-400">{stock.sector || 'N/A'}</td>
-                        <td className="py-3.5 px-4 text-right font-medium">₹{Number(stock.price).toFixed(2)}</td>
-                        <td className={`py-3.5 px-4 text-right font-bold ${stock.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {stock.change >= 0 ? `+${stock.change}%` : `${stock.change}%`}
-                        </td>
-                        <td className="py-3.5 px-4 text-right text-gray-400">{stock.volume ? (stock.volume / 100000).toFixed(1) + ' L' : '0'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500 font-mono text-xs">
-                No active symbols currently printing patterns within this parameter.
-              </div>
-            )}
+        {/* Math Rules Criteria display */}
+        <div className="space-y-3 mb-2">
+          <div className="flex items-center space-x-3 bg-gray-900/50 p-3 rounded border border-gray-800 text-xs text-gray-300">
+            <span className="bg-green-900/80 text-green-400 font-bold px-2 py-0.5 rounded border border-green-700/50 text-[10px]">PASS</span>
+            <span>Latest Close matches Latest Open within 0.1% of Close (Doji Body Rule)</span>
+          </div>
+          <div className="flex items-center space-x-3 bg-gray-900/50 p-3 rounded border border-gray-800 text-xs text-gray-300">
+            <span className="bg-green-900/80 text-green-400 font-bold px-2 py-0.5 rounded border border-green-700/50 text-[10px]">PASS</span>
+            <span>Latest Volume greater than 100,000 (Liquidity Rule)</span>
           </div>
         </div>
+      </div>
 
-        {/* ================= SECTION 3: AI RESEARCH ================= */}
-        <div className="bg-[#161b22] border border-gray-800 rounded-xl p-6 shadow-xl space-y-6">
-          <h2 className="text-xl font-bold tracking-wide text-center uppercase text-gray-300">AI Research</h2>
-          <form onSubmit={handleAIAnalyze} className="flex justify-center gap-3 max-w-md mx-auto">
-            <input
-              type="text"
-              placeholder="Enter stock symbol (e.g. SBIN, TCS)"
-              value={aiTicker}
-              onChange={(e) => setAiTicker(e.target.value)}
-              className="w-full bg-[#0d1117] border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono"
-            />
-            <button
-              type="submit"
-              disabled={aiLoading}
-              className="bg-emerald-600 hover:bg-emerald-500 transition-colors px-6 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
-            >
-              {aiLoading ? "Analyzing..." : "Analyze"}
-            </button>
-          </form>
-
-          {aiData && aiData.analysis && (
-            <div className="border border-gray-800 bg-[#0d1117] p-6 rounded-xl space-y-4 text-sm font-sans">
-              <div className="flex flex-col sm:flex-row justify-between border-b border-gray-800 pb-3 items-start sm:items-center gap-2">
-                <div>
-                  <h3 className="text-xl font-extrabold text-white">{aiData.name || aiData.ticker}</h3>
-                  <p className="text-gray-400 text-xs mt-0.5">Sector Focus: {aiData.analysis.fundamentals?.sector || 'General'}</p>
-                </div>
-                <span className="px-3 py-1 bg-blue-950/80 border border-blue-800 text-blue-400 text-xs font-mono font-bold rounded-full">
-                  {aiData.signal || 'HOLD'}
-                </span>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Business Summary</h4>
-                <p className="text-gray-300 text-xs leading-relaxed">{aiData.analysis.business}</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
-                <div className="p-4 bg-[#161b22] border border-gray-800 rounded-lg space-y-2">
-                  <h5 className="text-blue-400 font-bold border-b border-gray-800 pb-1">TECHNICAL ANALYSIS</h5>
-                  <div className="flex justify-between"><span>Relative Strength (RSI):</span> <span className="text-white font-bold">{aiData.analysis.technicals?.rsi || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span>Momentum Vector:</span> <span className="text-white font-bold">{aiData.analysis.technicals?.momentum || 'Neutral'}</span></div>
-                </div>
-
-                <div className="p-4 bg-[#161b22] border border-gray-800 rounded-lg space-y-2">
-                  <h5 className="text-emerald-400 font-bold border-b border-gray-800 pb-1">FUNDAMENTAL MATRIX</h5>
-                  <div className="flex justify-between"><span>P/E Ratio:</span> <span className="text-white font-bold">{aiData.analysis.fundamentals?.pe_ratio || "N/A"}</span></div>
-                  <div className="flex justify-between"><span>Return on Equity:</span> <span className="text-white font-bold">{aiData.analysis.fundamentals?.roe || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span>Dividend Yield:</span> <span className="text-white font-bold">{aiData.analysis.fundamentals?.dividend || 'N/A'}</span></div>
-                </div>
-              </div>
-
-              {aiData.analysis.risks && aiData.analysis.risks.length > 0 && (
-                <div className="space-y-1.5 pt-2">
-                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Risk Matrix Factors</h4>
-                  <ul className="list-disc pl-5 text-xs text-gray-400 space-y-1">
-                    {aiData.analysis.risks.map((risk, index) => (
-                      <li key={index}>{risk}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+      {/* Main Stock Table Display */}
+      <div className="max-w-6xl mx-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+        
+        {/* Table Filter Options */}
+        <div className="p-4 bg-gray-800/50 border-b border-gray-700 flex justify-between items-center">
+          <div className="text-sm font-semibold text-emerald-400 border-b-2 border-emerald-500 pb-4 -mb-4 px-2">
+            Filtered Stocks ({filteredStocks.length})
+          </div>
+          <input
+            type="text"
+            placeholder="Quick query symbol or company name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-gray-900 text-gray-200 text-xs rounded border border-gray-700 px-3 py-2 w-64 focus:outline-none focus:border-blue-500"
+          />
         </div>
 
+        {/* Data Grid matrix */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-900/40 text-gray-400 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-700">
+                <th className="p-4 w-16 text-center">Sr.</th>
+                <th className="p-4">Stock Name</th>
+                <th className="p-4">Symbol</th>
+                <th className="p-4">Price (INR)</th>
+                <th className="p-4">Chg %</th>
+                <th className="p-4 text-right pr-6">Volume</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700/60 text-xs">
+              {screenerLoading ? (
+                <tr>
+                  <td colSpan="6" className="p-12 text-center text-gray-400 tracking-wide">
+                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mr-3 align-middle"></div>
+                    Scanning market data matrices...
+                  </td>
+                </tr>
+              ) : filteredStocks.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="p-12 text-center text-gray-500">
+                    No equities matched the specified Doji neutral rules inside this window.
+                  </td>
+                </tr>
+              ) : (
+                filteredStocks.map((stock, index) => (
+                  <tr key={stock.symbol} className="hover:bg-gray-700/30 transition-colors">
+                    <td className="p-4 text-center text-gray-500 font-medium">{index + 1}</td>
+                    <td className="p-4 font-semibold text-white">{stock.name}</td>
+                    <td className="p-4 text-blue-400 font-bold tracking-wide">{stock.symbol}</td>
+                    <td className="p-4 font-mono text-gray-200">₹{parseFloat(stock.price).toFixed(2)}</td>
+                    <td className={`p-4 font-bold font-mono ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {stock.change >= 0 ? `+${stock.change.toFixed(2)}%` : `${stock.change.toFixed(2)}%`}
+                    </td>
+                    <td className="p-4 text-right pr-6 font-mono text-gray-300">
+                      {stock.volume.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
