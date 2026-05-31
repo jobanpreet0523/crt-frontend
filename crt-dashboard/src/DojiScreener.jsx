@@ -1,266 +1,213 @@
-import React, { useState, useEffect } from 'react';
-import { fetchDojiScan } from './api';
+import React, { useState } from 'react';
 
 export default function DojiScreener() {
-  const [timeframe, setTimeframe] = useState('1D');
-  const [screenerStocks, setScreenerStocks] = useState([]);
-  const [screenerLoading, setScreenerLoading] = useState(false);
+  // --- Global State Variables ---
+  const [currentTimeframe, setCurrentTimeframe] = useState('1D');
+  const [currentTab, setCurrentTab] = useState('results');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('table'); 
-  
-  // ADVANCED FEATURE: Track table sorting state
-  const [sortConfig, setSortConfig] = useState({ key: 'volume', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState({ key: 'symbol', direction: 'asc' });
 
-  useEffect(() => {
-    loadScreenerData(timeframe);
-  }, [timeframe]);
+  // --- Shared Raw Stocks Mock Data Input Vector ---
+  const rawStockDatabase = [
+    { name: "HDFC Bank Ltd.", symbol: "HDFCBANK", price: 1511.00, chg: 0.07, volume: 4800000, per_chg: "+0.07%", bse_code: "500180", isDoji: { '1D': true, '1W': true, '1M': true } },
+    { name: "ICICI Bank Ltd.", symbol: "ICICIBANK", price: 1120.40, chg: 0.64, volume: 3900000, per_chg: "+0.64%", bse_code: "532174", isDoji: { '1D': true, '1W': false, '1M': true } },
+    { name: "Reliance Industries Ltd.", symbol: "RELIANCE", price: 2450.50, chg: 0.02, volume: 3400000, per_chg: "+0.02%", bse_code: "500325", isDoji: { '1D': true, '1W': true, '1M': false } },
+    { name: "State Bank of India", symbol: "SBIN", price: 780.20, chg: -0.15, volume: 6100000, per_chg: "-0.15%", bse_code: "500112", isDoji: { '1D': true, '1W': true, '1M': false } },
+    { name: "Tata Consultancy Services", symbol: "TCS", price: 3851.00, chg: 0.05, volume: 1200000, per_chg: "+0.05%", bse_code: "532540", isDoji: { '1D': true, '1W': false, '1M': false } },
+    { name: "Wipro Ltd.", symbol: "WIPRO", price: 432.00, chg: -0.85, volume: 950000, per_chg: "-0.85%", bse_code: "576851", isDoji: { '1D': false, '1W': true, '1M': false } },
+    { name: "Infosys Ltd.", symbol: "INFY", price: 1455.00, chg: -1.24, volume: 2100000, per_chg: "-1.24%", bse_code: "500209", isDoji: { '1D': false, '1W': false, '1M': false } }
+  ];
 
-  const loadScreenerData = async (selectedTimeframe) => {
-    setScreenerLoading(true);
-    try {
-      const response = await fetchDojiScan(selectedTimeframe);
-      if (response.ok) {
-        setScreenerStocks(response.results || []);
-      }
-    } catch (err) {
-      console.error("Data fetch exception:", err);
-    } finally {
-      setScreenerLoading(false);
+  // --- Computational Data Filtering & Processing ---
+  const getFilteredData = () => {
+    // 1. Technical Rule Filter mapping
+    let filtered = rawStockDatabase.filter(stock => stock.isDoji[currentTimeframe]);
+
+    // 2. Search Text Input Filter mapping
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(stock =>
+        stock.name.toLowerCase().includes(query) ||
+        stock.symbol.toLowerCase().includes(query)
+      );
     }
+
+    // 3. Sorting Execution
+    filtered.sort((a, b) => {
+      let valA = a[sortConfig.key];
+      let valB = b[sortConfig.key];
+
+      if (typeof valA === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? valA.localeCompare(valB) 
+          : valB.localeCompare(valA);
+      } else {
+        return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+
+    return filtered;
   };
 
-  // ADVANCED FEATURE: Dynamic Column Sorting
-  const requestSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
+  // --- Control State Toggles Action Handlers ---
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
     setSortConfig({ key, direction });
   };
 
-  const filteredStocks = React.useMemo(() => {
-    let stocks = screenerStocks.filter(stock => 
-      stock.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stock.symbol.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (sortConfig.key !== null) {
-      stocks.sort((a, b) => {
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
-
-        if (sortConfig.key === 'price' || sortConfig.key === 'change' || sortConfig.key === 'volume') {
-          aValue = parseFloat(aValue);
-          bValue = parseFloat(bValue);
-        }
-
-        if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
-        return 0;
-      });
-    }
-    return stocks;
-  }, [screenerStocks, searchQuery, sortConfig]);
-
-  // ADVANCED FEATURE: Data sheet exporter tool
-  const exportToCSV = () => {
-    const headers = ['Sr,Stock Name,Symbol,Price(INR),Change%,Volume\n'];
-    const rows = filteredStocks.map((s, idx) => 
-      `${idx + 1},${s.name},${s.symbol},${s.price},${s.change}%,${s.volume}`
-    );
-    const blob = new Blob([headers.concat(rows.join('\n'))], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `Doji_Screener_${timeframe}.csv`);
-    a.click();
-  };
+  const filteredData = getFilteredData();
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-gray-800 p-6 font-sans">
-      
-      {/* Chartink Styled Top Header Panel */}
-      <div className="max-w-7xl mx-auto bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-[#1a2b4c] mb-1">Doji - 2 Candlestick Screener</h1>
-            <p className="text-xs text-gray-500">
-              Filters stocks forming precise equilibrium neutral doji patterns across selected timeframes.
-            </p>
-          </div>
-          <button 
-            onClick={exportToCSV}
-            className="bg-[#24a0ed] hover:bg-blue-600 text-white text-xs px-4 py-2 rounded font-semibold shadow-sm transition-all"
-          >
-            📥 Download CSV Dataset
+    <div style={{ paddingBottom: '40px', background: '#f8f9fa', minHeight: '100vh', color: '#333' }}>
+      {/* Header Bar */}
+      <header style={{ backgroundColor: '#2c3e50', color: 'white', padding: '12px 24px', display: 'flex', justifyContent: 'between', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <a href="#" className="logo" style={{ fontSize: '20px', fontWeight: 'bold', color: '#34d399', textDecoration: 'none' }}>
+            CHARTINK <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: '300' }}>Clone</span>
+          </a>
+          <nav style={{ display: 'flex', gap: '16px', fontSize: '14px' }}>
+            <a href="#" style={{ color: 'white', textDecoration: 'none' }}>Dashboard</a>
+            <a href="#" className="active" style={{ color: '#34d399', borderBottom: '2px solid #34d399', textDecoration: 'none', paddingBottom: '4px' }}>Charts</a>
+            <a href="#" style={{ color: 'white', textDecoration: 'none' }}>Screeners</a>
+            <a href="#" style={{ color: 'white', textDecoration: 'none' }}>Premium</a>
+          </nav>
+        </div>
+        <div>
+          <button className="btn-green" style={{ backgroundColor: '#059669', color: 'white', border: 'none', padding: '8px 16px', fontSize: '12px', fontWeight: '600', borderRadius: '4px', cursor: 'pointer' }}>
+            Create Scan
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Filter Engine Logic Cards */}
-      <div className="max-w-7xl mx-auto bg-white border border-gray-200 rounded-lg p-5 mb-6 shadow-sm">
-        <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">FILTER LOGIC ENGINE</span>
-          
-          <div className="flex space-x-1 bg-gray-100 p-1 rounded border border-gray-200及">
-            {['1D', '1W', '1M'].map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={`px-4 py-1 text-xs font-semibold rounded transition-all ${
-                  timeframe === tf ? 'bg-white text-gray-900 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                {tf === '1D' ? 'Daily' : tf === '1W' ? 'Weekly' : 'Monthly'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="bg-white p-2 px-3 rounded border border-gray-100 flex items-center gap-3 text-xs text-gray-600 shadow-sm">
-            <span className="bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">PASS</span>
-            <span>Latest Close matches Latest Open within 0.1% of Close (Doji Body Rule)</span>
-          </div>
-          <div className="bg-white p-2 px-3 rounded border border-gray-100 flex items-center gap-3 text-xs text-gray-600 shadow-sm">
-            <span className="bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">PASS</span>
-            <span>Latest Volume greater than 100,000 (Liquidity Rule)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Table & Tab Module Container */}
-      <div className="max-w-7xl mx-auto bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      {/* Main Container */}
+      <main style={{ maxWidth: '1200px', margin: '24px auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
-        <div className="p-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex space-x-6">
-            <button
-              onClick={() => setActiveTab('table')}
-              className={`pb-2 text-sm font-bold transition-all relative ${
-                activeTab === 'table' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              Filtered Stocks ({filteredStocks.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('gallery')}
-              className={`pb-2 text-sm font-bold transition-all relative ${
-                activeTab === 'gallery' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              Interactive Multi-Chart Gallery
-            </button>
+        {/* Meta Header Panel */}
+        <div className="panel meta-panel" style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="meta-title">
+            <h2 style={{ fontSize: '20px', color: '#1e293b' }}>Doji - 2 Candlestick Screener</h2>
+            <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Filters stocks forming precise equilibrium neutral doji patterns across selected timeframes.</p>
           </div>
-
-          <input
-            type="text"
-            placeholder="Quick search symbol or name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-white text-gray-800 text-xs rounded border border-gray-300 px-3 py-1.5 w-full sm:w-64 focus:outline-none focus:border-emerald-500 font-medium shadow-sm"
-          />
         </div>
 
-        {activeTab === 'table' ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#f8f9fa] text-gray-500 text-[11px] font-bold uppercase border-b border-gray-200 select-none">
-                  <th className="p-3 w-16 text-center border-r border-gray-100">Sr.</th>
-                  <th className="p-3 cursor-pointer hover:bg-gray-100 border-r border-gray-100" onClick={() => requestSort('name')}>
-                    Stock Name {sortConfig.key === 'name' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '↕'}
-                  </th>
-                  <th className="p-3 border-r border-gray-100">Symbol</th>
-                  <th className="p-3 border-r border-gray-100">Links</th>
-                  <th className="p-3 cursor-pointer hover:bg-gray-100 border-r border-gray-100" onClick={() => requestSort('price')}>
-                    Price (INR) {sortConfig.key === 'price' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '↕'}
-                  </th>
-                  <th className="p-3 cursor-pointer hover:bg-gray-100 border-r border-gray-100" onClick={() => requestSort('change')}>
-                    Chg % {sortConfig.key === 'change' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '↕'}
-                  </th>
-                  <th className="p-3 text-right pr-6 cursor-pointer hover:bg-gray-100" onClick={() => requestSort('volume')}>
-                    Volume {sortConfig.key === 'volume' ? (sortConfig.direction === 'ascending' ? '▲' : '▼') : '↕'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
-                {screenerLoading ? (
-                  <tr>
-                    <td colSpan="7" className="p-12 text-center text-gray-400">
-                      <div className="inline-block animate-spin rounded-full h-5 w-5 border-t-2 border-emerald-500 mr-3 align-middle" />
-                      Scanning technical matrices...
-                    </td>
-                  </tr>
-                ) : filteredStocks.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="p-12 text-center text-gray-400">
-                      No stocks found matching the criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStocks.map((stock, index) => (
-                    <tr key={stock.symbol} className="hover:bg-gray-50 transition-all">
-                      <td className="p-3 text-center text-gray-400 border-r border-gray-100">{index + 1}</td>
-                      <td className="p-3 font-semibold text-gray-900 border-r border-gray-100">{stock.name}</td>
-                      <td className="p-3 border-r border-gray-100">
-                        <a 
-                          href={`https://www.tradingview.com/symbols/NSE-${stock.symbol}/`}
-                          target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline"
-                        >
-                          {stock.symbol}
-                        </a>
-                      </td>
-                      <td className="p-3 text-gray-400 text-[11px] border-r border-gray-100">
-                        <span>BSE •</span>{' '}
-                        <a 
-                          href={`https://www.tradingview.com/symbols/NSE-${stock.symbol}/`}
-                          target="_blank" rel="noreferrer" className="text-blue-600 hover:underline"
-                        >
-                          Chart
-                        </a>
-                      </td>
-                      <td className="p-3 font-mono border-r border-gray-100">₹{parseFloat(stock.price).toFixed(2)}</td>
-                      <td className={`p-3 font-bold font-mono border-r border-gray-100 ${stock.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {stock.change >= 0 ? `+${stock.change.toFixed(2)}%` : `${stock.change.toFixed(2)}%`}
-                      </td>
-                      <td className="p-3 text-right pr-6 font-mono text-gray-600">
-                        {stock.volume.toLocaleString('en-IN')}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        {/* Filter Logic Engine */}
+        <div className="panel" style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="engine-header" style={{ background: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+            <div className="engine-title" style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter Logic Engine</div>
+            <div className="timeframe-container" style={{ display: 'flex', background: '#e2e8f0', padding: '2px', borderRadius: '6px', gap: '2px' }}>
+              <button className={`tf-btn ${currentTimeframe === '1D' ? 'active' : ''}`} onClick={() => setCurrentTimeframe('1D')} style={{ background: currentTimeframe === '1D' ? 'white' : 'transparent', border: 'none', padding: '4px 12px', fontSize: '12px', fontWeight: '500', color: '#475569', borderRadius: '4px', cursor: 'pointer', boxShadow: currentTimeframe === '1D' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Daily</button>
+              <button className={`tf-btn ${currentTimeframe === '1W' ? 'active' : ''}`} onClick={() => setCurrentTimeframe('1W')} style={{ background: currentTimeframe === '1W' ? 'white' : 'transparent', border: 'none', padding: '4px 12px', fontSize: '12px', fontWeight: '500', color: '#475569', borderRadius: '4px', cursor: 'pointer', boxShadow: currentTimeframe === '1W' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Weekly</button>
+              <button className={`tf-btn ${currentTimeframe === '1M' ? 'active' : ''}`} onClick={() => setCurrentTimeframe('1M')} style={{ background: currentTimeframe === '1M' ? 'white' : 'transparent', border: 'none', padding: '4px 12px', fontSize: '12px', fontWeight: '500', color: '#475569', borderRadius: '4px', cursor: 'pointer', boxShadow: currentTimeframe === '1M' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Monthly</button>
+            </div>
           </div>
-        ) : (
-          /* ADVANCED COMPONENT: INTERACTIVE LIVE TRADINGVIEW EMBEDS */
-          <div className="p-6 bg-gray-50 border-t border-gray-100">
-            {filteredStocks.length === 0 ? (
-              <div className="p-12 text-center text-gray-400">No active assets available.</div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {filteredStocks.map((stock) => (
-                  <div key={stock.symbol} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                    <div className="bg-white px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-xs text-gray-800">{stock.name} ({stock.symbol})</span>
-                      <span className={`text-xs font-mono font-bold ${stock.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ₹{stock.price} ({stock.change >= 0 ? `+${stock.change}%` : `${stock.change}%`})
-                      </span>
-                    </div>
-                    <div className="w-full h-80 bg-white">
-                      <iframe
-                        title={`tv-widget-${stock.symbol}`}
-                        src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_chart&symbol=NSE%3A${stock.symbol}&interval=${timeframe === '1D' ? 'D' : timeframe === '1W' ? 'W' : 'M'}&theme=light&style=1&timezone=Asia%2FKolkata&studies=%5B%5D&timeline=false&showPopupButton=true&popupWidth=1000&popupHeight=650`}
-                        className="w-full h-full border-0"
-                        allowFullScreen
-                      />
-                    </div>
-                  </div>
-                ))}
+          <div className="engine-body" style={{ padding: '16px', background: '#fafbfc', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="rule-row" style={{ display: 'flex', gap: '12px', alignItems: 'center', background: 'white', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'monospace', fontSize: '13px' }}>
+              <span className="badge-pass" style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', borderRadius: '4px' }}>Pass</span>
+              <span style={{ color: '#334155' }}>Latest Close matches Latest Open within 0.1% of Close (Doji Body Rule)</span>
+            </div>
+            <div className="rule-row" style={{ display: 'flex', gap: '12px', alignItems: 'center', background: 'white', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'monospace', fontSize: '13px' }}>
+              <span className="badge-pass" style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 6px', fontSize: '11px', fontWeight: 'bold', borderRadius: '4px' }}>Pass</span>
+              <span style={{ color: '#334155' }}>Latest Volume greater than 100,000 (Liquidity Rule)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Tabs Control System */}
+        <div className="tabs-row" style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e2e8f0' }}>
+          <button className={`tab-link ${currentTab === 'results' ? 'active' : ''}`} onClick={() => setCurrentTab('results')} style={{ background: 'none', border: 'none', paddingBottom: '8px', fontSize: '14px', fontWeight: '600', color: currentTab === 'results' ? '#059669' : '#64748b', cursor: 'pointer', borderBottom: currentTab === 'results' ? '2px solid #059669' : '2px solid transparent' }}>
+            Filtered Stocks (<span>{filteredData.length}</span>)
+          </button>
+          <button className={`tab-link ${currentTab === 'charts' ? 'active' : ''}`} onClick={() => setCurrentTab('charts')} style={{ background: 'none', border: 'none', paddingBottom: '8px', fontSize: '14px', fontWeight: '600', color: currentTab === 'charts' ? '#059669' : '#64748b', cursor: 'pointer', borderBottom: currentTab === 'charts' ? '2px solid #059669' : '2px solid transparent' }}>
+            Multi-Chart Gallery
+          </button>
+        </div>
+
+        {/* View 1: Filtered Stocks Data Table View */}
+        {currentTab === 'results' && (
+          <div className="panel">
+            <div className="table-tools" style={{ padding: '16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <input 
+                type="text" 
+                className="search-input" 
+                placeholder="Quick query symbol or company name..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '100%', maxWidth: '300px', padding: '6px 12px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px', outline: 'none' }}
+              />
+            </div>
+            <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'center', width: '50px', background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase' }}>Sr.</th>
+                    <th onClick={() => handleSort('name')} style={{ background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer' }}>Stock Name</th>
+                    <th onClick={() => handleSort('symbol')} style={{ background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer' }}>Symbol</th>
+                    <th style={{ background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase' }}>Links</th>
+                    <th onClick={() => handleSort('price')} style={{ textAlign: 'right', background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer' }}>Price (INR)</th>
+                    <th onClick={() => handleSort('chg')} style={{ textAlign: 'right', background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer' }}>Chg %</th>
+                    <th onClick={() => handleSort('volume')} style={{ textAlign: 'right', background: '#f1f5f9', color: '#475569', fontWeight: 'bold', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: '11px', textTransform: 'uppercase', cursor: 'pointer' }}>Volume</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>No equities match the tracking filter criteria setup.</td>
+                    </tr>
+                  ) : (
+                    filteredData.map((stock, index) => (
+                      <tr key={stock.symbol} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', color: '#94a3b8', padding: '12px 16px' }}>{index + 1}</td>
+                        <td style={{ color: '#0f172a', fontWeight: '600', padding: '12px 16px' }}>{stock.name}</td>
+                        <td style={{ padding: '12px 16px' }}><a href="#" style={{ color: '#2563eb', fontWeight: 'bold', textDecoration: 'none' }}>{stock.symbol}</a></td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ fontSize: '11px', color: '#cbd5e1', fontFamily: 'monospace' }}>
+                            <a href={`https://bseindia.com/stock-share-price/x/${stock.bse_code}`} target="_blank" rel="noreferrer" style={{ color: '#64748b', textDecoration: 'none' }}>BSE</a> • <a href="#" style={{ color: '#64748b', textDecoration: 'none' }}>Chart</a>
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: '500', padding: '12px 16px' }}>₹{stock.price.toFixed(2)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', padding: '12px 16px', color: stock.chg >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>{stock.per_chg}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#475569', padding: '12px 16px' }}>{stock.volume.toLocaleString()}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* View 2: Multi-Chart Gallery Grid View */}
+        {currentTab === 'charts' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '16px' }}>
+            {filteredData.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '32px', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                No active charts match the current tracking criteria rules.
               </div>
+            ) : (
+              filteredData.slice(0, 4).map(stock => (
+                <div className="chart-card" key={stock.symbol} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <div className="chart-card-header" style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px', marginBottom: '12px', fontSize: '14px', fontWeight: 'bold' }}>
+                    <span>{stock.symbol} - {stock.name}</span>
+                    <span style={{ color: '#059669' }}>₹{stock.price.toFixed(2)}</span>
+                  </div>
+                  <div className="chart-canvas-mock" style={{ height: '180px', background: '#0f172a', borderRadius: '6px', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="chart-label" style={{ position: 'absolute', top: '8px', left: '12px', color: '#475569', fontFamily: 'monospace', fontSize: '10px' }}>
+                      Candlestick Preview ({currentTimeframe})
+                    </div>
+                    {/* Simulated Candlestick Pattern Shapes */}
+                    <div className="doji-wick" style={{ width: '2px', height: '120px', background: '#94a3b8', position: 'absolute' }}></div>
+                    <div className="doji-body" style={{ width: '32px', height: '2px', background: 'white', position: 'absolute' }}></div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         )}
-      </div>
+
+      </main>
     </div>
   );
 }
